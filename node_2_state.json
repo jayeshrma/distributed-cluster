@@ -1,0 +1,21 @@
+{
+  "commit_version": 7,
+  "store": {
+    "course": {
+      "value": "MIT-6.5840+Lab1",
+      "version": 2
+    },
+    "consistency": {
+      "value": "Linearizable",
+      "version": 3
+    },
+    "grade": {
+      "value": "B+",
+      "version": 7
+    }
+  },
+  "dedup_table": {
+    "cli-1": 103,
+    "browser-client": 504
+  }
+}

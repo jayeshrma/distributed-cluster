@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Distributed KV Cluster Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; }
+    h1 { margin-top: 0; font-size: 22px; }
+    .nodes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e293b; border: 2px solid #334155; border-radius: 10px; padding: 16px; }
+    .card.leader { border-color: #22c55e; }
+    .card.dead { border-color: #ef4444; opacity: 0.7; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: bold; }
+    .LEADER { background: #16a34a; color: white; }
+    .BACKUP { background: #2563eb; color: white; }
+    .OFFLINE { background: #dc2626; color: white; }
+    .controls { background: #1e293b; padding: 16px; border-radius: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input, select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; }
+    button { background: #2563eb; border: none; font-weight: bold; cursor: pointer; }
+    pre { background: #0f172a; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Distributed System Cluster Monitor (Replication, Fault Tolerance & Consistency)</h1>
+  <div class="controls">
+    <select id="targetNode">
+      <option value="http://127.0.0.1:8001">Send to Node 1 (:8001)</option>
+      <option value="http://127.0.0.1:8002">Send to Node 2 (:8002)</option>
+      <option value="http://127.0.0.1:8003">Send to Node 3 (:8003)</option>
+    </select>
+    <select id="op"><option value="PUT">PUT</option><option value="APPEND">APPEND</option></select>
+    <input id="key" placeholder="Key" value="grade">
+    <input id="val" placeholder="Value" value="A+">
+    <button onclick="sendWrite(false)">Submit New Write</button>
+    <button style="background:#d97706" onclick="sendWrite(true)">Simulate Duplicate Retry</button>
+    <span id="lastResult" style="margin-left:12px; font-size:13px; color:#38bdf8;"></span>
+  </div>
+  <br>
+  <div class="nodes" id="clusterGrid"></div>
+
+  <script>
+    let reqCounter = 500;
+    async function sendWrite(isDuplicate) {
+      if (!isDuplicate) reqCounter++;
+      const url = document.getElementById('targetNode').value + '/kv';
+      const payload = {
+        key: document.getElementById('key').value,
+        value: document.getElementById('val').value,
+        op: document.getElementById('op').value,
+        client_id: "browser-client",
+        req_id: reqCounter
+      };
+      try {
+        const r = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const d = await r.json();
+        document.getElementById('lastResult').innerText = `Req #${reqCounter}: ${d.status} (v${d.version}) via Leader Node ${d.leader}`;
+      } catch (e) {
+        document.getElementById('lastResult').innerText = `Target Node unreachable! Select an online node.`;
+      }
+      refreshCluster();
+    }
+
+    async function refreshCluster() {
+      const grid = document.getElementById('clusterGrid');
+      let html = '';
+      for (let i = 1; i <= 3; i++) {
+        try {
+          const r = await fetch(`http://127.0.0.1:800${i}/health`);
+          const d = await r.json();
+          html += `<div class="card ${d.role === 'LEADER' ? 'leader' : ''}">
+            <h3>Node ${i} (127.0.0.1:800${i}) <span class="badge ${d.role}">${d.role}</span></h3>
+            <p><b>Current Leader:</b> Node ${d.leader_id} | <b>Commit Version:</b> v${d.commit_version}</p>
+            <pre>${JSON.stringify(d.store, null, 2)}</pre>
+          </div>`;
+        } catch (e) {
+          html += `<div class="card dead">
+            <h3>Node ${i} (127.0.0.1:800${i}) <span class="badge OFFLINE">CRASHED / OFFLINE</span></h3>
+            <p>Heartbeat lost. Remaining nodes maintain quorum.</p>
+          </div>`;
+        }
+      }
+      grid.innerHTML = html;
+    }
+    setInterval(refreshCluster, 1000);
+    refreshCluster();
+  </script>
+</body>
+</html>
